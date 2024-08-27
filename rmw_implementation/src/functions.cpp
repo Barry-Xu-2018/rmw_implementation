@@ -499,9 +499,19 @@ RMW_INTERFACE_FN(
   3, ARG_TYPES(const rmw_client_t *, const void *, int64_t *))
 
 RMW_INTERFACE_FN(
+  rmw_send_serialized_request,
+  rmw_ret_t, RMW_RET_ERROR,
+  3, ARG_TYPES(const rmw_client_t *, const rmw_serialized_message_t *, int64_t *))
+
+RMW_INTERFACE_FN(
   rmw_take_response,
   rmw_ret_t, RMW_RET_ERROR,
   4, ARG_TYPES(const rmw_client_t *, rmw_service_info_t *, void *, bool *))
+
+RMW_INTERFACE_FN(
+  rmw_take_serialized_response,
+  rmw_ret_t, RMW_RET_ERROR,
+  4, ARG_TYPES(const rmw_client_t *, rmw_service_info_t *, rmw_serialized_message_t *, bool *))
 
 RMW_INTERFACE_FN(
   rmw_client_request_publisher_get_actual_qos,
@@ -531,9 +541,19 @@ RMW_INTERFACE_FN(
   4, ARG_TYPES(const rmw_service_t *, rmw_service_info_t *, void *, bool *))
 
 RMW_INTERFACE_FN(
+  rmw_take_serialized_request,
+  rmw_ret_t, RMW_RET_ERROR,
+  4, ARG_TYPES(const rmw_service_t *, rmw_service_info_t *, rmw_serialized_message_t *, bool *))
+
+RMW_INTERFACE_FN(
   rmw_send_response,
   rmw_ret_t, RMW_RET_ERROR,
   3, ARG_TYPES(const rmw_service_t *, rmw_request_id_t *, void *))
+
+RMW_INTERFACE_FN(
+  rmw_send_serialized_response,
+  rmw_ret_t, RMW_RET_ERROR,
+  3, ARG_TYPES(const rmw_service_t *, rmw_request_id_t *, const rmw_serialized_message_t *))
 
 RMW_INTERFACE_FN(
   rmw_service_response_publisher_get_actual_qos,
@@ -835,11 +855,15 @@ void prefetch_symbols(void)
   GET_SYMBOL(rmw_create_client)
   GET_SYMBOL(rmw_destroy_client)
   GET_SYMBOL(rmw_send_request)
+  GET_SYMBOL(rmw_send_serialized_request)
   GET_SYMBOL(rmw_take_response)
+  GET_SYMBOL(rmw_take_serialized_response)
   GET_SYMBOL(rmw_create_service)
   GET_SYMBOL(rmw_destroy_service)
   GET_SYMBOL(rmw_take_request)
+  GET_SYMBOL(rmw_take_serialized_request)
   GET_SYMBOL(rmw_send_response)
+  GET_SYMBOL(rmw_send_serialized_response)
   GET_SYMBOL(rmw_take_event)
   GET_SYMBOL(rmw_create_guard_condition)
   GET_SYMBOL(rmw_destroy_guard_condition)
