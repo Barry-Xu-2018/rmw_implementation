@@ -286,6 +286,62 @@ TEST_F(TestClient, send_request_with_bad_arguments) {
   rmw_reset_error();
 }
 
+TEST_F(TestClient, send_serialized_request_with_bad_arguments) {
+  constexpr char service_name[] = "/test";
+  const rosidl_service_type_support_t * ts =
+    ROSIDL_GET_SRV_TYPE_SUPPORT(test_msgs, srv, BasicTypes);
+
+  test_msgs__srv__BasicTypes_Request client_request;
+  ASSERT_TRUE(test_msgs__srv__BasicTypes_Request__init(&client_request));
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    test_msgs__srv__BasicTypes_Request__fini(&client_request);
+  });
+  client_request.bool_value = false;
+  client_request.uint8_value = 1;
+  client_request.uint32_value = 2;
+
+  rmw_serialized_message_t serialized_request = rmw_get_zero_initialized_serialized_message();
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    auto ret = rmw_serialized_message_fini(&serialized_request);
+  EXPECT_EQ(RMW_RET_OK, ret);
+  });
+  rmw_ret_t ret = rmw_serialize(
+    static_cast<void *>(&client_request),
+    ts->request_typesupport,
+    &serialized_request);
+  ASSERT_EQ(RMW_RET_OK, ret);
+
+  int64_t sequence_number;
+  rmw_client_t * client =
+    rmw_create_client(node, ts, service_name, &rmw_qos_profile_default);
+  ASSERT_NE(nullptr, client) << rmw_get_error_string().str;
+
+  ret = rmw_send_serialized_request(nullptr, &serialized_request, &sequence_number);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  ret = rmw_send_serialized_request(client, nullptr, &sequence_number);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  ret = rmw_send_serialized_request(client, &serialized_request, nullptr);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  const char * implementation_identifier = client->implementation_identifier;
+  client->implementation_identifier = "not-an-rmw-implementation-identifier";
+  ret = rmw_send_serialized_request(client, &serialized_request, &sequence_number);
+  EXPECT_EQ(RMW_RET_INCORRECT_RMW_IMPLEMENTATION, ret) << rmw_get_error_string().str;
+  rmw_reset_error();
+  client->implementation_identifier = implementation_identifier;
+
+  ret = rmw_destroy_client(node, client);
+  EXPECT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+  rmw_reset_error();
+}
+
 TEST_F(TestClient, take_response_with_bad_arguments) {
   constexpr char service_name[] = "/test";
   const rosidl_service_type_support_t * ts =

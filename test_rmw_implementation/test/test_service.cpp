@@ -410,6 +410,136 @@ TEST_F(TestService, send_reponse_with_bad_arguments) {
   srv->implementation_identifier = implementation_identifier;
 }
 
+TEST_F(TestService, send_serialized_response_with_bad_arguments) {
+  constexpr char service_name[] = "/test";
+  const rosidl_service_type_support_t * ts =
+    ROSIDL_GET_SRV_TYPE_SUPPORT(test_msgs, srv, BasicTypes);
+
+  test_msgs__srv__BasicTypes_Response service_response;
+  ASSERT_TRUE(test_msgs__srv__BasicTypes_Response__init(&service_response));
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    test_msgs__srv__BasicTypes_Response__fini(&service_response);
+  });
+  service_response.bool_value = false;
+  service_response.uint8_value = 1;
+  service_response.uint32_value = 2;
+
+  rmw_serialized_message_t serialized_response = rmw_get_zero_initialized_serialized_message();
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    auto ret = rmw_serialized_message_fini(&serialized_response);
+  EXPECT_EQ(RMW_RET_OK, ret);
+  });
+  rmw_ret_t ret = rmw_serialize(
+    static_cast<void *>(&service_response),
+    ts->response_typesupport,
+    &serialized_response);
+  ASSERT_EQ(RMW_RET_OK, ret);
+
+  test_msgs__srv__BasicTypes_Request service_request;
+  ASSERT_TRUE(test_msgs__srv__BasicTypes_Request__init(&service_request));
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    test_msgs__srv__BasicTypes_Request__fini(&service_request);
+  });
+  service_request.bool_value = false;
+  service_request.uint8_value = 1;
+  service_request.uint32_value = 2;
+
+  rmw_serialized_message_t serialized_request = rmw_get_zero_initialized_serialized_message();
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    auto ret = rmw_serialized_message_fini(&serialized_request);
+  EXPECT_EQ(RMW_RET_OK, ret);
+  });
+  ret = rmw_serialize(
+    static_cast<void *>(&service_request),
+    ts->request_typesupport,
+    &serialized_request);
+  ASSERT_EQ(RMW_RET_OK, ret);
+
+  int64_t sequence_number;
+  rmw_service_info_t header;
+  rmw_service_t * srv =
+    rmw_create_service(node, ts, service_name, &rmw_qos_profile_default);
+  ASSERT_NE(nullptr, srv) << rmw_get_error_string().str;
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    rmw_ret_t ret = rmw_destroy_service(node, srv);
+    EXPECT_EQ(RMW_RET_OK, ret) << rcutils_get_error_string().str;
+  });
+  rmw_client_t * client =
+    rmw_create_client(node, ts, service_name, &rmw_qos_profile_default);
+  ASSERT_NE(nullptr, client) << rmw_get_error_string().str;
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    rmw_ret_t ret = rmw_destroy_client(node, client);
+    EXPECT_EQ(RMW_RET_OK, ret) << rcutils_get_error_string().str;
+  });
+
+  bool is_available = false;
+  SLEEP_AND_RETRY_UNTIL(rmw_intraprocess_discovery_delay, rmw_intraprocess_discovery_delay * 10) {
+    rmw_ret_t ret = rmw_service_server_is_available(node, client, &is_available);
+    EXPECT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+    rmw_reset_error();
+    if (is_available) {
+      break;
+    }
+  }
+  ASSERT_TRUE(is_available);
+
+  ret = rmw_send_serialized_request(client, &serialized_request, &sequence_number);
+  ASSERT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+
+  size_t number_of_services = 1u;
+  rmw_wait_set_t * wait_set = rmw_create_wait_set(&context, number_of_services);
+  ASSERT_NE(nullptr, wait_set) << rmw_get_error_string().str;
+  OSRF_TESTING_TOOLS_CPP_SCOPE_EXIT(
+  {
+    rmw_ret_t ret = rmw_destroy_wait_set(wait_set);
+    EXPECT_EQ(RMW_RET_OK, ret) << rcutils_get_error_string().str;
+  });
+  void * array[1];
+  array[0] = srv->data;
+  rmw_services_t srv_array;
+  srv_array.service_count = 1u;
+  srv_array.services = array;
+  rmw_time_t timeout;
+  auto rmw_intraprocess_discovery_delay_in_nanoseconds =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+    rmw_intraprocess_discovery_delay * 10).count();
+  timeout.sec = rmw_intraprocess_discovery_delay_in_nanoseconds / 1000000000;
+  timeout.nsec = rmw_intraprocess_discovery_delay_in_nanoseconds % 1000000000;
+  ret = rmw_wait(nullptr, nullptr, &srv_array, nullptr, nullptr, wait_set, &timeout);
+  ASSERT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+  ASSERT_NE(nullptr, srv_array.services[0]);
+
+  bool taken = false;
+  ret = rmw_take_serialized_request(srv, &header, &serialized_request, &taken);
+  ASSERT_EQ(RMW_RET_OK, ret) << rmw_get_error_string().str;
+  ASSERT_EQ(true, taken);
+
+  ret = rmw_send_serialized_response(nullptr, &header.request_id, &serialized_response);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  ret = rmw_send_serialized_response(srv, nullptr, &serialized_response);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  ret = rmw_send_serialized_response(srv, &header.request_id, nullptr);
+  EXPECT_EQ(RMW_RET_INVALID_ARGUMENT, ret);
+  rmw_reset_error();
+
+  const char * implementation_identifier = srv->implementation_identifier;
+  srv->implementation_identifier = "not-an-rmw-implementation-identifier";
+  ret = rmw_send_serialized_response(srv, &header.request_id, &serialized_response);
+  EXPECT_EQ(RMW_RET_INCORRECT_RMW_IMPLEMENTATION, ret) << rmw_get_error_string().str;
+  rmw_reset_error();
+  srv->implementation_identifier = implementation_identifier;
+}
+
 TEST_F(TestService, send_reponse_with_client_gone) {
   constexpr char service_name[] = "/test";
   const rosidl_service_type_support_t * ts =
